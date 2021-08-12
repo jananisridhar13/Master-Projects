@@ -1,0 +1,297 @@
+Introduction
+Allocating our investments among different assets is a key strategy to minimize our risk and potentially increase our gains. Our ideal asset allocation is the mix of investments, from most aggressive to safest, that will earn the total return over time that you need. Creating such an investment plan is very crucial for any invester out there. And we decided to create an investment plan which considers invester's current financial situation, risk he/she is willing to take. Our goal is to create a stock portfolio that will maximize profits for a given risk level. Using Harry Markowitz's Mean-Variance theory, given a set of assets and a budget, our goal is to minimize the risk which is given by the covariance (risk) of the portfolio, select a desired level of risk, find the portfolios efficient frontier(which shows returns at each risk level), and calculate the optimal allocation for each stock.
+
+S&P
+
+The S&P 500, is a stock market index that measures the stock performance of 500 large companies listed on stock exchanges in the United States. The 500 stocks in the index are divided into 11 sectors, each of them consisting of companies in the same or related industries. This diversification of companies into various sectors allows investors to spend their investment over many companies in various sectors rather than putting all of their money into just one sector.
+
+Energy sector
+The S&P 500 Energy comprises those companies included in the S&P 500 that are classified as members of the GICS energy sector.
+
+Data Prep and EDA
+# mounting google drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# importing the required modules
+# pandas for data manipulation and numpy for numeric computations
+import numpy as np 
+import pandas as pd 
+# The below modules for data visualization
+import matplotlib.pyplot as plt 
+import seaborn as sns 
+from pylab import * 
+
+# installing pyomo and ipopt solver
+!pip install -q pyomo
+from pyomo.environ import *
+
+try:
+    import google.colab
+    try:
+        from pyomo.environ import *
+    except:
+        !pip install -q pyomo
+    if not 'ipopt_executable' in vars():
+        !wget -N -q "https://ampl.com/dl/open/ipopt/ipopt-linux64.zip"
+        !unzip -o -q ipopt-linux64
+        ipopt_executable = '/content/ipopt'
+except:
+    pass
+    
+Plot 1: Bargraph for Percent Change (%chg) over the past one month
+# 1M %chg
+# setting up the figure size
+plt.figure(figsize=(12,8))
+# plotting a bar graph for 1M % change vs symbol
+plt.bar(df['Symbol'], df['1M %Chg'], align='center', alpha=0.7, color='red')
+# label for x-axis
+plt.xlabel("Symbols") 
+# label for y-axis     
+plt.ylabel("1-Month % change") 
+#title for the bar plot      
+plt.title("Bargraph for 1M % change of each symbol")
+#naming the ticks on the x-axis  
+plt.xticks(range(len(df['Symbol'])),df['Symbol'], rotation=90) 
+# showing the plot
+plt.show() 
+
+A smaller percent change means smaller standard deviation, which implies less risk on an investment. A larger percent change means larger variance, which implies high risk or volatality on an investment.
+
+From the above plot,
+
+CVX,DVN, OKE, OXY and XOM have the lowest 1 month percent change.
+Stocks BKR, FANG, HFC, COP, PXD have the highest 1 month %change.
+
+Modeling Section
+# Import modules
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pylab import *
+# import datetime # handling dates
+# import time # handling times
+# from dateutil.relativedelta import relativedelta # time difference
+# from matplotlib.pyplot import figure 
+
+# Get average return of each stock
+Avg_Return = pd.DataFrame(np.mean(return_data) ,columns=["Avg_Return"])
+print(Avg_Return)
+# Get standard deviation average return of each stock
+Std_Dev_Return = pd.DataFrame(np.std(return_data) ,columns=["Std_Dev_Return"])
+print(Std_Dev_Return)
+
+Nonlinear Optimization Model
+# Create covariance table on stock return dataframe
+return_data_cov = return_data.cov()
+print('Covariance Matrix:')
+print(return_data_cov)
+print('\n') # return/blank line
+
+# Create the average of each stock
+# Also the objective function coefficients
+return_data_return = return_data.mean()
+print('Average Return:')
+print(return_data_return)
+
+from pyomo.environ import *
+m = ConcreteModel()
+
+# Define variables, each one is a stock
+# Set bounds as (0,1) for each stock
+m.CVX = Var(within=NonNegativeReals, bounds=(0,1))
+m.KMI = Var(within=NonNegativeReals, bounds=(0,1))
+m.FANG = Var(within=NonNegativeReals, bounds=(0,1))
+m.PSX = Var(within=NonNegativeReals, bounds=(0,1))
+m.PXD = Var(within=NonNegativeReals, bounds=(0,1))
+m.MPC = Var(within=NonNegativeReals, bounds=(0,1))
+m.OKE = Var(within=NonNegativeReals, bounds=(0,1))
+m.COP = Var(within=NonNegativeReals, bounds=(0,1))
+m.VLO = Var(within=NonNegativeReals, bounds=(0,1))
+m.WMB = Var(within=NonNegativeReals, bounds=(0,1))
+
+# Declare objective
+m.objective = Objective(expr =               
+                        m.CVX*return_data_return[0] + 
+                        m.KMI*return_data_return[1] + 
+                        m.FANG*return_data_return[2] +
+                        m.PSX*return_data_return[3] + 
+                        m.PXD*return_data_return[4] +
+                        m.MPC*return_data_return[5] +
+                        m.OKE*return_data_return[6] +
+                        m.COP*return_data_return[7] +
+                        m.VLO*return_data_return[8] +
+                        m.WMB*return_data_return[9],
+                        sense=maximize) # yes, we want to MAX our returns!
+
+# Declare constraints
+# Sum of all porportions = 1
+m.sum_proportions = Constraint(expr = m.CVX + m.KMI + m.FANG + m.PSX + m.PXD + m.MPC + m.OKE + m.COP + m.VLO + m.WMB == 1)
+
+Risk
+To find the risk limits we used the Excel File shared in class called 'Ms Womack from Powell (portfolio optimization).xlsx' This analyzed the covariances and starting proportions of 0.1 per stock and gave an idea of where to start in terms of risk. Above is a screenshot of the excel worksheet.
+# Create calculations table for calculate the risk
+# Max risk should be less than 0.0.0001
+max_risk = 0.0001
+def calc_risk():
+  # this is a list of all of your investment allocations (proportion invested in each stock)
+  # this is updated as the model is running (reference decision variables)
+  proportions = [ m.CVX, m.KMI, m.FANG, m.PSX, m.PXD, m.MPC, m.OKE, m.COP, m.VLO, m.WMB]
+  risk_matrix = [] # an empty list
+  
+  # now we iterate across the covariance matrix
+  # 'risk elements' are = cov(A,B)*prop(A)*prop(B)
+  # since there are 10 stocks, there are 10*10 = 100 elements
+  # sum these 100 elements up at the end (that's the risk)
+  for index, col in enumerate(return_data_cov.columns):
+    i = 0
+    risk = []
+    for row in return_data_cov[col]:
+      risk.append(proportions[index]*row*proportions[i])
+      i = i + 1
+    risk_matrix.append(risk)
+  risk_matrix = pd.DataFrame(risk_matrix)
+  return risk_matrix.sum().sum() 
+
+# Define risk limits. This is what psioptparam() does.
+
+# This is a sequence of options
+risk_limits = np.arange(0.00007, 0.00035, 0.0000005) # take tiny steps
+risk_limits
+
+Results:
+# Update the risk contraint for each limit and then solve the problem
+param_analysis = {} # key=risk, value =stock allocations 
+returns = {} # key=risk, value = return
+for r in risk_limits:
+  m.total_risk = Constraint(expr = calc_risk() <= r)
+  # run solver
+  result = SolverFactory('ipopt', executable=ipopt_executable).solve(m).write()
+  # store our allocation proportions
+  param_analysis[r] = [m.CVX(), m.KMI(), m.FANG(), m.PSX(), m.PXD(), m.MPC(), m.OKE(), m.COP(), m.VLO(), m.WMB()]
+  # store our returns
+  returns[r] =  m.CVX()*return_data_return[0] + m.KMI()*return_data_return[1] + m.FANG()*return_data_return[2] + m.PSX()*return_data_return[3] + m.PXD()*return_data_return[4] + m.MPC()*return_data_return[5] + m.OKE()*return_data_return[6] + m.COP()*return_data_return[7] + m.VLO()*return_data_return[8] + m.WMB()*return_data_return[9]
+  
+ Stock Allocation Graph:
+ # Generate the dataframe for proportions of the portfolio for each risk limit
+param_analysis = pd.DataFrame.from_dict(param_analysis, orient='index')
+param_analysis.columns = [ 'CVX', 'KMI', 'FANG', 'PSX', 'PXD', 'MPC', 'OKE', 'COP', 'VLO', 'WMB']
+param_analysis.plot()
+plt.title('Optimal Stock Allocation for Different Risk Levels')
+plt.show()
+
+# Plot Efficient Frontier using pylab
+from pylab import *
+plot(risk, reward, '-.')
+title('The Efficient Frontier')
+xlabel('Risk')
+ylabel('Reward (Return)')
+plt.show()
+
+# Extract just the data we need (adjclose)
+# Get the adjclose price for the CVX (one sample)
+monthly_data = pd.DataFrame(dow_monthly_prices['CVX']['adjclose']).rename(columns = {"adjclose":"CVX"})
+
+# Pull historical price data for each stocks to match with our news score later
+dow_monthly_prices = {ticker : si.get_data(ticker,start_date = '01/01/2020',end_date='10/02/2020',interval='1mo') for ticker in tickers_list}
+dow_monthly_prices
+
+Risk Chosen=0.00014499999999999978 
+
+This risk was chosen from the Efficient Frontier made in the Modeling Section. We chose this value because while we want to increase our returns as much as possible, we still want to maintain a diverse portfolio to reduce risk to a point where we feel comfortable investing. We chose our risk as 0.0145% which is where the frontier curve already has a dimishing return to increase in risk. This risk was chosen pretty close to where the return stops increasing (or increases by very little and the risk continues to grow). We chose a value where the on the curve because if we pick a point to the left our returns will be too low and if we pick on further right our risk will be too high. We want to choose a spot that will maximize returns will minimizing risk. This value will decide the stock allocation of our final portfolio.
+# View and search through the param_analysis dataframe
+# Import module
+from google.colab import data_table
+data_table.DataTable(param_analysis)
+
+
+# Combine all the tickers (all the rest of the samples)
+for i in tickers_list[1:]:
+  monthly_data[i] = pd.DataFrame(dow_monthly_prices[i]['adjclose'])
+monthly_data
+   
+Calculate Monthly Stock and Portfolio Value
+Monthly Stock Value=Stock Value of Previous Month + (Stock Value of Previous Month ∗ Percent Change in Return this Month) 
+
+Stock Value of Previous Month  For first month is found from param_analysis, the stock allocation for the risk value chosen from our modeling section
+Each month after is calculated using formula above
+Percent Change in Return this Month:  Comes from historical data extracted from Yahoo Finance
+
+# Write functions that multiply the current value by pct change in return
+# Start list with initial investment amount begin_inv[]
+# (Stock value of past month) + (Return of this month * Stock value of past month)
+# Adds each month to the stockname_list[] (repeat for all 10 stocks)
+
+CVX_list = [first_inv['CVX'][0]]
+for i in range(0, len(CVX_return)): 
+    CVX_list.append(CVX_list[i] + (CVX_return[i] * CVX_list[i])) 
+print ("Value of CVX is: " + str(CVX_list)) 
+
+KMI_list = [first_inv['KMI'][0]]
+for i in range(0, len(KMI_return)): 
+    KMI_list.append(KMI_list[i] + (KMI_return[i] * KMI_list[i])) 
+print ("Value of KMI is: " + str(KMI_list)) 
+
+FANG_list = [first_inv['FANG'][0]]
+for i in range(0, len(FANG_return)): 
+    FANG_list.append(FANG_list[i] + (FANG_return[i] * FANG_list[i])) 
+print ("Value of FANG is: " + str(FANG_list)) 
+
+PSX_list = [first_inv['PSX'][0]]
+for i in range(0, len(PSX_return)): 
+    PSX_list.append(PSX_list[i] + (PSX_return[i] * PSX_list[i])) 
+print ("Value of PSX is: " + str(PSX_list)) 
+
+PXD_list = [first_inv['PXD'][0]]
+for i in range(0, len(PXD_return)): 
+    PXD_list.append(PXD_list[i] + (PXD_return[i] * PXD_list[i])) 
+print ("Value of PXD is: " + str(PXD_list)) 
+
+MPC_list = [first_inv['MPC'][0]]
+for i in range(0, len(MPC_return)): 
+    MPC_list.append(MPC_list[i] + (MPC_return[i] * MPC_list[i])) 
+print ("Value of MPC is: " + str(MPC_list)) 
+
+OKE_list = [first_inv['OKE'][0]]
+for i in range(0, len(OKE_return)): 
+    OKE_list.append(OKE_list[i] + (OKE_return[i] * OKE_list[i])) 
+print ("Value of OKE is: " + str(OKE_list)) 
+
+COP_list = [first_inv['COP'][0]]
+for i in range(0, len(COP_return)): 
+    COP_list.append(COP_list[i] + (COP_return[i] * COP_list[i])) 
+print ("Value of COP is: " + str(COP_list)) 
+
+VLO_list = [first_inv['VLO'][0]]
+for i in range(0, len(VLO_return)): 
+    VLO_list.append(VLO_list[i] + ((VLO_return[i]) * VLO_list[i])) 
+print ("Value of VLO is: " + str(VLO_list)) 
+
+WMB_list = [first_inv['WMB'][0]]
+for i in range(0, len(WMB_return)): 
+    WMB_list.append(WMB_list[i] + (WMB_return[i] * WMB_list[i])) 
+print ("Value of WMB is: " + str(WMB_list))
+
+# Add values from each stock across each month to get total monthly porfolio value
+total_value = []
+for i in range(0, len(CVX_list)):
+  total_value.append(CVX_list[i] + KMI_list[i] + FANG_list[i] + PSX_list[i] + PXD_list[i] + MPC_list[i] + OKE_list[i] + COP_list[i] + VLO_list[i] + WMB_list[i])
+print ("Total value of monthly portfolio is: " + str(total_value))
+
+Written Analysis
+In the end we ended up making having an increase in returns at the beginning of October in 2020 with our chosen stock allocation. Our final portfolio value was of  $426,032  that is a  57.4%  decrease from our initial investment. I would attribute this outcome to luck and taking a chance on a riskier stock allocation. The year 2020 was very difficult year to predict for the stock market because of the COVID-19 outbreak and resulting pandemic. We can see how volatile it was simply through the change in stock price values and the change in portfolio value month-by-month. This can clearly be seen in the drop in stock prices and portfolio value from February to March, which is when the pandemic really hit the US and the country started going into lockdown. While we did have solid reasoning behind the risk and allocation we chose, it was very difficult to make the right decision with an unpredictable year like this one.
+
+Another challenge was that to create the Stock Allocations Graph and the Efficient Frontier Graph the historical data we used was only 2019 daily data. Ideally, we would want to create these visualizations and models using many years worth of data. Our risk was pretty high since  95%  of our initial investment was allocated to one stock, OKE. This made our whole portfolio highly dependent on it's stock price. Due to taking this risk we we suffered a major loss whenever OKE did. WMB was the stock that recovered the quickest from the drop in March but according to our portfolio allocation and the risk chosen in our Efficent Frontier, based on historical data we only invested about  $2.66 . In real-world practice, I would probably choose a lower risk and more diverse portfolio to avoid the major changes in the value of my portfolio.
+
+Conclusion
+Based on the analysis:
+
+Diversification is the most critical component of reaching long-range investment goals while minimizing risk.
+Diversification in different stocks and various sectors is necessary to reduce the risk in the market
+Diversification may lead to lower rewards because the risk is mitigated, and vice versa
+The energy sector didn't perform well in 2020, and COVID is one of the reasons.
+Low-risk business model provide financial flexibility to continue expanding its pipeline network.
+When investing, we should balance the stocks we have and the sectors we choose. Don't put all your eggs in one basket.
+When creating a portfolio analysis extract historical data further back than 1 year. Having more data to analyze will improve our model's ability to choose better allocations and predict a larger return on investment.
+Investors should focus on the stocks of companies that can easily survive a downturn, since that also puts them in the best position to thrive when market conditions improve.
+Take small steps in the risk limits to better plot the Efficient Frontier and choose risk level. This way we can see a more defined curve and see how return changes as we increase risk. Will help in choosing the right stock allocation.
