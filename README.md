@@ -1,3 +1,3 @@
 # BDM-Projects
 
-Allocating our investments among different assets is a key strategy to minimize our risk and potentially increase our gains. Our ideal asset allocation is the mix of investments, from most aggressive to safest, that will earn the total return over time that you need. Creating such an investment plan is very crucial for any invester out there. And we decided to create an investment plan which considers invester's current financial situation, risk he/she is willing to take. Our goal is to create a stock portfolio that will maximize profits for a given risk level. Using Harry Markowitz's Mean-Variance theory, given a set of assets and a budget, our goal is to minimize the risk which is given by the covariance (risk) of the portfolio, select a desired level of risk, find the portfolios efficient frontier(which shows returns at each risk level), and calculate the optimal allocation for each stock.
+
