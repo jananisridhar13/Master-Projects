@@ -1,3 +1,3 @@
-# BDM-Projects
+# Projects
 
 
